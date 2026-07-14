@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: codecartographer-postgres
+    environment:
+      POSTGRES_USER: codecart
+      POSTGRES_PASSWORD: codecart
+      POSTGRES_DB: codecart
+    ports:
+      - "5432:5432"
+    volumes:
+      - codecartographer-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codecart -d codecart"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  codecartographer-pgdata:
