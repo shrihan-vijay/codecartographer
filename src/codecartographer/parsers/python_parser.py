@@ -26,6 +26,13 @@ def _text(source: bytes, node: Node) -> str:
 
 def module_name_from_path(file_path: str) -> str:
     parts = list(PurePosixPath(file_path).parts)
+    # src-layout convention (PEP 517/518): "src/" is an on-disk container, not part
+    # of the importable package name -- `src/pkg/mod.py` imports as `pkg.mod`, not
+    # `src.pkg.mod`. Without this, absolute imports in src-layout repos (like this
+    # one) never match a real module and same-package call resolution silently
+    # degrades to near-zero.
+    if len(parts) > 1 and parts[0] == "src":
+        parts = parts[1:]
     if parts and parts[-1] == "__init__.py":
         parts = parts[:-1]
     elif parts:

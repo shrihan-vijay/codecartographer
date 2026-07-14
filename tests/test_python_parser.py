@@ -1,9 +1,16 @@
 from pathlib import Path
 
 from codecartographer.parsers.base import SymbolKind
-from codecartographer.parsers.python_parser import PythonParser
+from codecartographer.parsers.python_parser import PythonParser, module_name_from_path
 
 FIXTURES = Path(__file__).parent / "fixtures" / "python"
+
+
+def test_module_name_strips_src_layout_prefix() -> None:
+    assert module_name_from_path("src/pkg/mod.py") == "pkg.mod"
+    assert module_name_from_path("src/pkg/__init__.py") == "pkg"
+    assert module_name_from_path("pkg/mod.py") == "pkg.mod"
+    assert module_name_from_path("mod.py") == "mod"
 
 
 def parse_fixture(name: str) -> tuple:
