@@ -49,3 +49,4 @@ succeeds, a test that passes, a query that returns the right shape) over vague a
 ## Existing specs
 
 - [phase-1-indexing-foundation.md](phase-1-indexing-foundation.md) — Implemented
+- [phase-2-embeddings.md](phase-2-embeddings.md) — Implemented

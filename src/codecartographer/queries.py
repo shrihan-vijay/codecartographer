@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from codecartographer.db.models import Edge, FileMetric, IndexingRun, Node
+from codecartographer.db.models import Chunk, Edge, FileMetric, IndexingRun, Node
 
 _TRAVERSE_SQL = {
     "callers": text(
@@ -73,6 +73,16 @@ class HotspotRow:
 
 
 @dataclass
+class SearchResult:
+    qualified_name: str
+    file_path: str
+    start_line: int | None
+    node_type: str
+    distance: float
+    content: str
+
+
+@dataclass
 class StatsResult:
     run: IndexingRun
     node_counts: dict[str, int]
@@ -132,6 +142,31 @@ def find_hotspots(session: Session, run_id: int, limit: int = 20) -> list[Hotspo
             score=r.git_churn * r.function_count,
         )
         for r in rows
+    ]
+
+
+def search_chunks(
+    session: Session, run_id: int, query_embedding: list[float], limit: int = 10
+) -> list[SearchResult]:
+    distance = Chunk.embedding.cosine_distance(query_embedding).label("distance")
+    query = (
+        select(Node, Chunk.content, distance)
+        .join(Node, Node.id == Chunk.node_id)
+        .where(Chunk.indexing_run_id == run_id)
+        .order_by(distance)
+        .limit(limit)
+    )
+    rows = session.execute(query).all()
+    return [
+        SearchResult(
+            qualified_name=node.qualified_name,
+            file_path=node.file_path,
+            start_line=node.start_line,
+            node_type=node.node_type.value,
+            distance=dist,
+            content=content,
+        )
+        for node, content, dist in rows
     ]
 
 

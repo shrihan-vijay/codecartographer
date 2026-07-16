@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from codecartographer.db.models import (
+    Chunk,
     Edge,
     EdgeType,
     FileMetric,
@@ -16,6 +17,7 @@ from codecartographer.db.models import (
     UnresolvedCall,
 )
 from codecartographer.db.session import session_scope
+from codecartographer.embedder import Embedder, build_chunk_text
 from codecartographer.logging import get_logger
 from codecartographer.metrics import compute_git_churn, compute_loc
 from codecartographer.parsers.base import ParsedCall, ParsedImport, ParsedSymbol, SymbolKind
@@ -41,6 +43,7 @@ class IndexSummary:
     node_count: int
     edge_count: int
     unresolved_count: int
+    chunk_count: int
 
 
 def _get_commit_sha(repo_path: Path) -> str:
@@ -94,9 +97,10 @@ def _replace_existing_run(session: Session, repo_path: str, commit_sha: str) -> 
         session.flush()
 
 
-def index_repo(repo_path: Path) -> IndexSummary:
+def index_repo(repo_path: Path, embedder: Embedder | None = None) -> IndexSummary:
     repo_path = repo_path.resolve()
     commit_sha = _get_commit_sha(repo_path)
+    embedder = embedder or Embedder()
 
     files = sorted(walk_source_files(repo_path))
     file_paths = [f.as_posix() for f in files]
@@ -149,6 +153,20 @@ def index_repo(repo_path: Path) -> IndexSummary:
         session.flush()
 
         node_id_by_qn = {n.qualified_name: n.id for n in (*file_nodes, *symbol_nodes)}
+
+        chunk_texts = [build_chunk_text(repo_path, s) for s in all_symbols]
+        embeddings = embedder.embed(chunk_texts)
+        chunks = [
+            Chunk(
+                indexing_run_id=run.id,
+                node_id=node_id_by_qn[symbol.qualified_name],
+                content=text,
+                embedding=embedding,
+                model_name=embedder.model_name,
+            )
+            for symbol, text, embedding in zip(all_symbols, chunk_texts, embeddings, strict=True)
+        ]
+        session.add_all(chunks)
 
         edges: list[Edge] = []
         for ce in resolution.contains_edges:
@@ -220,6 +238,7 @@ def index_repo(repo_path: Path) -> IndexSummary:
         node_count = len(node_id_by_qn)
         edge_count = len(edges)
         unresolved_count = len(unresolved_rows)
+        chunk_count = len(chunks)
         run.node_count = node_count
         run.edge_count = edge_count
         run.unresolved_count = unresolved_count
@@ -232,4 +251,5 @@ def index_repo(repo_path: Path) -> IndexSummary:
         node_count=node_count,
         edge_count=edge_count,
         unresolved_count=unresolved_count,
+        chunk_count=chunk_count,
     )

@@ -1,6 +1,7 @@
 import datetime
 import enum
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
     DateTime,
@@ -13,6 +14,8 @@ from sqlalchemy import (
 )
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+EMBEDDING_DIM = 384  # all-MiniLM-L6-v2's output dimension
 
 
 class Base(DeclarativeBase):
@@ -64,6 +67,9 @@ class IndexingRun(Base):
         back_populates="indexing_run", cascade="all, delete-orphan", passive_deletes=True
     )
     file_metrics: Mapped[list["FileMetric"]] = relationship(
+        back_populates="indexing_run", cascade="all, delete-orphan", passive_deletes=True
+    )
+    chunks: Mapped[list["Chunk"]] = relationship(
         back_populates="indexing_run", cascade="all, delete-orphan", passive_deletes=True
     )
 
@@ -159,3 +165,29 @@ class FileMetric(Base):
     git_churn: Mapped[int] = mapped_column(Integer, nullable=False)
 
     indexing_run: Mapped["IndexingRun"] = relationship(back_populates="file_metrics")
+
+
+class Chunk(Base):
+    __tablename__ = "chunks"
+    __table_args__ = (
+        UniqueConstraint("indexing_run_id", "node_id", name="uq_chunks_run_node"),
+        Index(
+            "idx_chunks_embedding",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    indexing_run_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("indexing_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    node_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("nodes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
+    model_name: Mapped[str] = mapped_column(Text, nullable=False)
+
+    indexing_run: Mapped["IndexingRun"] = relationship(back_populates="chunks")

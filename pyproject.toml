@@ -16,6 +16,8 @@ dependencies = [
     "tree-sitter-typescript>=0.23,<0.24",
     "structlog>=24.1",
     "pathspec>=0.12",
+    "sentence-transformers>=3.0",
+    "pgvector>=0.3",
 ]
 
 [project.scripts]
@@ -49,7 +51,10 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 "src/codecartographer/cli.py" = ["B008"]  # typer.Argument()/typer.Option() as defaults is the intended API
 
 [tool.mypy]
-python_version = "3.11"
+# 3.13 to match the actual dev/runtime interpreter -- numpy's bundled stubs (pulled in
+# transitively via sentence-transformers/pgvector) use 3.12+ stub syntax that mypy can't
+# parse under an older target. requires-python above stays >=3.11 as the real floor.
+python_version = "3.13"
 packages = ["codecartographer"]
 mypy_path = "src"
 strict = true

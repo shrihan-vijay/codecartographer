@@ -3,6 +3,7 @@ from pathlib import Path
 import typer
 
 from codecartographer.db.session import session_scope
+from codecartographer.embedder import Embedder
 from codecartographer.indexer import index_repo
 from codecartographer.logging import configure_logging
 from codecartographer.queries import (
@@ -11,6 +12,7 @@ from codecartographer.queries import (
     find_hotspots,
     get_latest_run,
     get_stats,
+    search_chunks,
 )
 
 app = typer.Typer(name="codecart", help="Code intelligence CLI for CodeCartographer.")
@@ -29,6 +31,7 @@ def index(repo_path: Path = typer.Argument(..., help="Path to the repository to 
     typer.echo(f"  files:     {summary.file_count}")
     typer.echo(f"  nodes:     {summary.node_count}")
     typer.echo(f"  edges:     {summary.edge_count}")
+    typer.echo(f"  chunks:    {summary.chunk_count}")
     typer.echo(f"  unresolved calls: {summary.unresolved_count}")
 
 
@@ -102,6 +105,30 @@ def hotspots(
                 f"{row.score:>6}  {row.git_churn:>6}  {row.function_count:>6}  {row.loc:>6}"
             )
             typer.echo(f"{stats_prefix}  {row.file_path}")
+
+
+@app.command()
+def search(
+    query: str = typer.Argument(..., help="Natural-language search query."),
+    repo_path: Path = typer.Argument(..., help="Path to the repository."),
+    limit: int = typer.Option(10, "--limit", help="Number of results to show."),
+) -> None:
+    """Semantic search over indexed code chunks (functions/methods/classes)."""
+    with session_scope() as session:
+        run = get_latest_run(session, repo_path=str(repo_path.resolve()))
+        if run is None:
+            typer.echo(
+                "No completed indexing run found for this repo. Run `codecart index` first.",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        query_vector = Embedder().embed([query])[0]
+        results = search_chunks(session, run.id, query_vector, limit=limit)
+        if not results:
+            typer.echo("No chunks found for this run.")
+            return
+        for r in results:
+            typer.echo(f"{r.distance:.4f}  {r.qualified_name}  ({r.file_path}:{r.start_line})")
 
 
 @app.command()
