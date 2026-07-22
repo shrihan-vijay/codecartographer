@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "CodeCartographer",
+  "version": "0.1.0",
+  "description": "Ask cited questions about a locally indexed codebase, right from a Chrome side panel.",
+  "permissions": ["storage", "sidePanel"],
+  "host_permissions": ["http://localhost:8000/*"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "options.html",
+  "action": {
+    "default_title": "Open CodeCartographer"
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  }
+}

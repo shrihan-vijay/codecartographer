@@ -51,3 +51,4 @@ succeeds, a test that passes, a query that returns the right shape) over vague a
 - [phase-1-indexing-foundation.md](phase-1-indexing-foundation.md) — Implemented
 - [phase-2-embeddings.md](phase-2-embeddings.md) — Implemented
 - [phase-3-agentic-qa.md](phase-3-agentic-qa.md) — Implemented
+- [phase-4-chrome-extension.md](phase-4-chrome-extension.md) — Implemented

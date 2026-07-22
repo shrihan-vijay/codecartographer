@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>CodeCartographer</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    margin: 0;
+    padding: 1rem;
+    color: #1a1a1a;
+  }
+  h1 { font-size: 1.05rem; margin: 0 0 0.75rem; }
+  form { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem; }
+  input[type="text"] {
+    padding: 0.5rem 0.6rem;
+    font-size: 0.9rem;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+  }
+  button {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    border: none;
+    border-radius: 6px;
+    background: #1a1a1a;
+    color: white;
+    cursor: pointer;
+  }
+  button:disabled { background: #999; cursor: default; }
+  #answer { white-space: pre-wrap; line-height: 1.4; font-size: 0.9rem; }
+  .citations { margin-top: 1rem; padding-left: 0; list-style: none; }
+  .citations li {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8rem;
+    background: #f4f4f4;
+    border-radius: 4px;
+    padding: 0.3rem 0.5rem;
+    margin-bottom: 0.3rem;
+    word-break: break-all;
+  }
+  #progress {
+    margin: 0 0 1rem 0;
+    padding-left: 0;
+    list-style: none;
+    font-size: 0.8rem;
+    color: #555;
+  }
+  #progress li {
+    padding: 0.2rem 0;
+    border-left: 2px solid #ddd;
+    padding-left: 0.6rem;
+    margin-bottom: 0.15rem;
+  }
+  #progress li.active {
+    border-left-color: #1a1a1a;
+    color: #1a1a1a;
+    font-weight: 500;
+  }
+  #error { color: #b00020; font-size: 0.85rem; }
+  #options-link { font-size: 0.8rem; color: #555; }
+</style>
+</head>
+<body>
+  <h1>Ask your codebase</h1>
+  <form id="ask-form">
+    <input type="text" id="repo-path" placeholder="/path/to/indexed/repo" required />
+    <input type="text" id="question" placeholder="What does X do?" required />
+    <button type="submit" id="submit-btn">Ask</button>
+  </form>
+  <div id="error"></div>
+  <ul id="progress"></ul>
+  <div id="answer"></div>
+  <ul class="citations" id="citations"></ul>
+  <p id="options-link"><a href="options.html" target="_blank">Backend settings</a></p>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
