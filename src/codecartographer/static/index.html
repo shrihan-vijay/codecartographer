@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>CodeCartographer</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    max-width: 720px;
+    margin: 3rem auto;
+    padding: 0 1rem;
+    color: #1a1a1a;
+  }
+  h1 { font-size: 1.25rem; }
+  form { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+  input[type="text"] {
+    flex: 1;
+    padding: 0.6rem 0.75rem;
+    font-size: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+  }
+  button {
+    padding: 0.6rem 1.2rem;
+    font-size: 1rem;
+    border: none;
+    border-radius: 6px;
+    background: #1a1a1a;
+    color: white;
+    cursor: pointer;
+  }
+  button:disabled { background: #999; cursor: default; }
+  #answer { white-space: pre-wrap; line-height: 1.5; }
+  .citations { margin-top: 1rem; padding-left: 0; list-style: none; }
+  .citations li {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85rem;
+    background: #f4f4f4;
+    border-radius: 4px;
+    padding: 0.3rem 0.6rem;
+    margin-bottom: 0.3rem;
+  }
+  #progress {
+    margin: 0 0 1rem 0;
+    padding-left: 0;
+    list-style: none;
+    font-size: 0.85rem;
+    color: #555;
+  }
+  #progress li {
+    padding: 0.2rem 0;
+    border-left: 2px solid #ddd;
+    padding-left: 0.6rem;
+    margin-bottom: 0.15rem;
+  }
+  #progress li.active {
+    border-left-color: #1a1a1a;
+    color: #1a1a1a;
+    font-weight: 500;
+  }
+  #progress li.active::after {
+    content: "";
+    display: inline-block;
+    width: 0.5em;
+  }
+  #error { color: #b00020; }
+</style>
+</head>
+<body>
+  <h1>Ask your codebase</h1>
+  <form id="ask-form">
+    <input type="text" id="repo-path" placeholder="/path/to/indexed/repo" required />
+    <input type="text" id="question" placeholder="What does X do?" required />
+    <button type="submit" id="submit-btn">Ask</button>
+  </form>
+  <div id="error"></div>
+  <ul id="progress"></ul>
+  <div id="answer"></div>
+  <ul class="citations" id="citations"></ul>
+
+  <script>
+    const form = document.getElementById("ask-form");
+    const errorEl = document.getElementById("error");
+    const progressEl = document.getElementById("progress");
+    const answerEl = document.getElementById("answer");
+    const citationsEl = document.getElementById("citations");
+    const submitBtn = document.getElementById("submit-btn");
+
+    function describeToolCall(toolName, args) {
+      switch (toolName) {
+        case "search_code":
+          return `Searching for "${args.query}"...`;
+        case "get_callers":
+          return `Finding callers of ${args.symbol_name}...`;
+        case "get_callees":
+          return `Finding what ${args.symbol_name} calls...`;
+        case "read_source":
+          return `Reading ${args.file_path}:${args.start_line}-${args.end_line}...`;
+        default:
+          return `Calling ${toolName}...`;
+      }
+    }
+
+    function addProgressStep(text) {
+      const previous = progressEl.querySelector("li.active");
+      if (previous) previous.classList.remove("active");
+      const li = document.createElement("li");
+      li.className = "active";
+      li.textContent = text;
+      progressEl.appendChild(li);
+    }
+
+    function renderFinal(data) {
+      const activeStep = progressEl.querySelector("li.active");
+      if (activeStep) activeStep.classList.remove("active");
+      answerEl.textContent = data.answer;
+      for (const c of data.citations) {
+        const li = document.createElement("li");
+        const lines = c.start_line
+          ? `:${c.start_line}${c.end_line && c.end_line !== c.start_line ? `-${c.end_line}` : ""}`
+          : "";
+        li.textContent = `${c.file_path}${lines}${c.symbol_name ? `  (${c.symbol_name})` : ""}`;
+        citationsEl.appendChild(li);
+      }
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const repoPath = document.getElementById("repo-path").value;
+      const question = document.getElementById("question").value;
+
+      submitBtn.disabled = true;
+      errorEl.textContent = "";
+      answerEl.textContent = "";
+      citationsEl.innerHTML = "";
+      progressEl.innerHTML = "";
+      addProgressStep("Thinking...");
+
+      try {
+        const response = await fetch("/ask/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repo_path: repoPath, question }),
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.detail || `Request failed (${response.status})`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          let newlineIndex;
+          while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
+            const line = buffer.slice(0, newlineIndex);
+            buffer = buffer.slice(newlineIndex + 1);
+            if (!line.trim()) continue;
+
+            const event = JSON.parse(line);
+            if (event.type === "tool_call") {
+              addProgressStep(describeToolCall(event.tool_name, event.arguments));
+            } else if (event.type === "final") {
+              renderFinal(event);
+            } else if (event.type === "error") {
+              throw new Error(event.detail);
+            }
+          }
+        }
+      } catch (err) {
+        errorEl.textContent = err.message;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

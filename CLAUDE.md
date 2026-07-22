@@ -6,9 +6,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 CodeCartographer indexes large repos into (a) a symbol/call graph via static analysis and (b)
 AST-aware semantic chunks in pgvector, then serves cited Q&A over the codebase via an agentic
-retrieval layer. It's built in phases; **Phase 1 (current) is the deterministic indexing
-foundation only — no LLM calls, no embeddings, no pgvector usage, no web API.** Those are
-Phases 2-3. See `specs/` for the spec of each phase (read `specs/README.md` first).
+retrieval layer. It's built in phases: **Phase 1** (implemented) is the deterministic indexing
+foundation — no LLM calls. **Phase 2** (implemented) added local, offline embeddings + semantic
+search — still no LLM/network calls. **Phase 3** (implemented) adds an agentic Q&A layer running
+against a **locally-hosted model via Ollama**, not a paid hosted API — the user chose this
+specifically to keep the whole project free, with no API key and no per-call cost. **Phase 4**
+(implemented) is a Chrome side panel extension client on top of Phase 3's API — no new backend
+capability, just a second, browser-native way to reach the same `/ask` endpoint. See `specs/`
+for the spec of each phase (read `specs/README.md` first).
+
+**Phase 3 setup note**: Ollama itself plus the model (`llama3.1`, ~4.7GB) need to be installed
+once — a multi-GB download, so confirm with the user before pulling a model, same as any other
+sizable one-time install. After that, every call is free and local; no per-call confirmation
+needed (unlike a paid API) since there's no cost. If a future phase or change introduces a call
+to a paid/metered LLM API instead, treat that the way Phase 3 originally was scoped: never call
+it without the user's explicit go-ahead for that specific call.
 
 ## Commands
 

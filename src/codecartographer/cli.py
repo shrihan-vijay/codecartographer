@@ -2,6 +2,7 @@ from pathlib import Path
 
 import typer
 
+from codecartographer.agent import DEFAULT_MODEL, AgentAnswer, run_agent_stream
 from codecartographer.db.session import session_scope
 from codecartographer.embedder import Embedder
 from codecartographer.indexer import index_repo
@@ -129,6 +130,40 @@ def search(
             return
         for r in results:
             typer.echo(f"{r.distance:.4f}  {r.qualified_name}  ({r.file_path}:{r.start_line})")
+
+
+@app.command()
+def ask(
+    question: str = typer.Argument(..., help="Natural-language question about the codebase."),
+    repo_path: Path = typer.Argument(..., help="Path to the repository."),
+    model: str = typer.Option(DEFAULT_MODEL, "--model", help="Ollama model to use."),
+) -> None:
+    """Ask a question about the indexed repo, answered by an agent with graph/search tools."""
+    with session_scope() as session:
+        resolved = repo_path.resolve()
+        run = get_latest_run(session, repo_path=str(resolved))
+        if run is None:
+            typer.echo(
+                "No completed indexing run found for this repo. Run `codecart index` first.",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        result: AgentAnswer | None = None
+        for event in run_agent_stream(session, run, resolved, question, model=model):
+            if isinstance(event, AgentAnswer):
+                result = event
+            else:
+                typer.echo(f"... calling {event.tool_name}({dict(event.arguments)})", err=True)
+        assert result is not None
+        typer.echo(result.answer)
+        if result.citations:
+            typer.echo("\nCitations:")
+            for c in result.citations:
+                lines = f":{c.start_line}" if c.start_line else ""
+                if c.end_line and c.end_line != c.start_line:
+                    lines += f"-{c.end_line}"
+                symbol = f"  ({c.symbol_name})" if c.symbol_name else ""
+                typer.echo(f"  {c.file_path}{lines}{symbol}")
 
 
 @app.command()
