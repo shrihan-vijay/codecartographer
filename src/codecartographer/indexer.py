@@ -97,6 +97,23 @@ def _replace_existing_run(session: Session, repo_path: str, commit_sha: str) -> 
         session.flush()
 
 
+def _dedupe_edges(edges: list[Edge]) -> list[Edge]:
+    """Collapse edges that collide on the DB's uniqueness key (run, type, src, dst,
+    line) -- e.g. two distinct calls to the same symbol on the same source line
+    (`[f(x), f(y)]`) are two real call sites but one CALLS edge in this graph model,
+    since edges aren't tracked at column granularity.
+    """
+    seen: set[tuple[EdgeType, int, int, int | None]] = set()
+    deduped = []
+    for edge in edges:
+        key = (edge.edge_type, edge.src_node_id, edge.dst_node_id, edge.line)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(edge)
+    return deduped
+
+
 def index_repo(repo_path: Path, embedder: Embedder | None = None) -> IndexSummary:
     repo_path = repo_path.resolve()
     commit_sha = _get_commit_sha(repo_path)
@@ -207,7 +224,7 @@ def index_repo(repo_path: Path, embedder: Embedder | None = None) -> IndexSummar
                         line=cae.line,
                     )
                 )
-        session.add_all(edges)
+        session.add_all(_dedupe_edges(edges))
 
         unresolved_rows = []
         for u in resolution.unresolved_calls:
