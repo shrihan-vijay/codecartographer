@@ -2,7 +2,7 @@
 
 CodeCartographer indexes large repos into (a) a symbol/call graph via static analysis and
 (b) AST-aware semantic chunks in pgvector, then serves cited Q&A over the codebase via an
-agentic retrieval layer running on a **local, offline LLM (Ollama)** — no API key, no
+agentic retrieval layer running on a **local, offline LLM (Ollama)**: no API key, no
 per-call cost, no code leaving your machine.
 
 ```
@@ -25,7 +25,7 @@ Citations:
 - **Static analysis**: tree-sitter parses Python and TypeScript into a symbol/call graph
   (functions, classes, methods, CALLS/IMPORTS/CONTAINS edges), persisted in Postgres and
   queried via recursive CTEs (`callers`/`callees` at arbitrary depth, hotspot ranking).
-  Resolution is deliberately best-effort with graceful failure — an unresolved call is
+  Resolution is deliberately best-effort with graceful failure: an unresolved call is
   recorded with a reason, not silently guessed.
 - **Semantic search**: AST-aware chunking + local sentence-transformer embeddings
   (`all-MiniLM-L6-v2`) stored in pgvector, so search works on meaning, not just symbol names.
@@ -35,14 +35,14 @@ Citations:
 - **Chrome extension**: a side-panel client (`extension/`) for the same `/ask` API, so you
   can ask questions about an indexed repo without leaving the browser.
 
-Built in four phases — see [`specs/`](specs/) for the design doc behind each one:
+Built in four phases; see [`specs/`](specs/) for the design doc behind each one:
 
 | Phase | What it adds |
 | --- | --- |
-| 1 — Indexing foundation | tree-sitter parsing → symbol/call graph in Postgres |
-| 2 — Embeddings | AST-aware chunking + pgvector semantic search |
-| 3 — Agentic Q&A | tool-calling agent over Ollama, cited answers, FastAPI backend |
-| 4 — Chrome extension | side-panel client on top of the Phase 3 API |
+| 1: Indexing foundation | tree-sitter parsing to symbol/call graph in Postgres |
+| 2: Embeddings | AST-aware chunking + pgvector semantic search |
+| 3: Agentic Q&A | tool-calling agent over Ollama, cited answers, FastAPI backend |
+| 4: Chrome extension | side-panel client on top of the Phase 3 API |
 
 ## Setup
 
@@ -52,7 +52,7 @@ Requires [uv](https://docs.astral.sh/uv/), Docker (or a local Postgres 16 + pgve
 ```
 make setup              # uv sync
 make db-up               # docker compose up postgres+pgvector, then alembic upgrade head
-ollama pull llama3.1     # one-time, ~4.7GB — only needed for `codecart ask`
+ollama pull llama3.1     # one-time, ~4.7GB, only needed for `codecart ask`
 ```
 
 ## Usage
@@ -80,7 +80,7 @@ Chrome extension (see [`extension/README.md`](extension/README.md)) for a side-p
 ## Development
 
 ```
-make test    # uv run pytest — requires a live Postgres via CODECART_DATABASE_URL
+make test    # uv run pytest, requires a live Postgres via CODECART_DATABASE_URL
 make lint    # ruff check + mypy
 ```
 
