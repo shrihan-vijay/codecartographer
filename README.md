@@ -43,7 +43,7 @@ Built in five phases; see [`specs/`](specs/) for the design doc behind each one:
 | 2: Embeddings | AST-aware chunking + pgvector semantic search |
 | 3: Agentic Q&A | tool-calling agent over Ollama, cited answers, FastAPI backend |
 | 4: Chrome extension | side-panel client on top of the Phase 3 API |
-| 5: PyPI packaging | bundled migrations + `codecart db-init`, installable without a git clone |
+| 5: PyPI packaging | bundled migrations + `codecart db-init`, groundwork for installing without a git clone (not currently published) |
 
 ## Setup
 
@@ -55,11 +55,6 @@ make setup              # uv sync
 make db-up               # docker compose up postgres+pgvector, then alembic upgrade head
 ollama pull llama3.1     # one-time, ~4.7GB, only needed for `codecart ask`
 ```
-
-**Without a git clone** (once published to PyPI): `pip install codecartographer` gets you the
-`codecart` CLI and the FastAPI backend directly. Point it at your own Postgres (with the `vector`
-extension available) and run `codecart db-init` instead of `make db-up`, which still needs
-`docker-compose.yml` from this repo. See `specs/phase-5-pypi-packaging.md`.
 
 ## Usage
 
