@@ -45,7 +45,7 @@ dev = [
 line-length = 100
 target-version = "py311"
 src = ["src", "tests"]
-extend-exclude = ["migrations/versions", "tests/fixtures"]
+extend-exclude = ["src/codecartographer/migrations/versions", "tests/fixtures"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]

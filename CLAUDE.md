@@ -43,6 +43,7 @@ uv run codecart hotspots <repo_path>
 uv run codecart stats
 uv run alembic revision --autogenerate -m "message"
 uv run alembic upgrade head
+uv run codecart db-init    # same migrations, run from the installed package -- no alembic.ini needed
 ```
 
 Tests require a live Postgres reachable via `CODECART_DATABASE_URL` (defaults to the

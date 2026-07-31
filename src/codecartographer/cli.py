@@ -1,6 +1,8 @@
 from pathlib import Path
 
 import typer
+from alembic import command as alembic_command
+from alembic.config import Config
 
 from codecartographer.agent import DEFAULT_MODEL, AgentAnswer, run_agent_stream
 from codecartographer.db.session import session_scope
@@ -22,6 +24,19 @@ app = typer.Typer(name="codecart", help="Code intelligence CLI for CodeCartograp
 @app.callback()
 def main() -> None:
     configure_logging()
+
+
+@app.command(name="db-init")
+def db_init() -> None:
+    """Create/upgrade the database schema from the migrations bundled inside this package --
+    works whether codecart came from a repo checkout or `pip install codecartographer`, no
+    alembic.ini or git clone required.
+    """
+    migrations_dir = Path(__file__).parent / "migrations"
+    cfg = Config()
+    cfg.set_main_option("script_location", str(migrations_dir))
+    alembic_command.upgrade(cfg, "head")
+    typer.echo("Database schema is up to date.")
 
 
 @app.command()

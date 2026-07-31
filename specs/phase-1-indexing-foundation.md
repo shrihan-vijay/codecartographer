@@ -28,7 +28,8 @@ queried via `queries.py`. See CLAUDE.md's Architecture section for the detailed 
 (parser decoupling, qualified_name conventions per language, resolution strategy, run-scoping,
 `passive_deletes` gotcha) — not duplicated here since that file is the one guaranteed to be read.
 
-**Schema** (approved before implementation; see `migrations/versions/` for the DDL as shipped):
+**Schema** (approved before implementation; see `src/codecartographer/migrations/versions/` for the
+DDL as shipped, moved there in Phase 5 so `pip install codecartographer` ships them too):
 `indexing_runs` (repo_path + commit_sha unique, replace-on-reindex), `nodes` (FILE/FUNCTION/
 METHOD/CLASS as one typed table, so pgvector semantic chunks in a later phase can FK to
 `nodes.id` regardless of granularity), `edges` (CALLS/IMPORTS/CONTAINS, typed rather than
