@@ -17,9 +17,29 @@ _TSX_LANGUAGE = Language(tsts.language_tsx())
 _FUNCTION_VALUE_TYPES = {"arrow_function", "function_expression"}
 
 # Node types that terminate a call-collection walk because they're handled as
-# separate symbols elsewhere. Mirrors the Python parser's approach; definitions
-# nested inside if/for/try blocks are out of scope for Phase 1 (see python_parser).
+# separate symbols elsewhere. Mirrors the Python parser's approach.
 _OPAQUE_TYPES = {"function_declaration", "class_declaration", "method_definition"}
+
+# Control-flow/block containers whose children are treated as part of the same
+# lexical scope as their enclosing block, so a function/class declaration nested
+# inside an if/for/while/do/try/switch body is still discovered as a symbol (and
+# its own calls attributed correctly) instead of being silently skipped.
+_TRANSPARENT_TYPES = {
+    "statement_block",
+    "if_statement",
+    "else_clause",
+    "for_statement",
+    "for_in_statement",
+    "while_statement",
+    "do_statement",
+    "try_statement",
+    "catch_clause",
+    "finally_clause",
+    "switch_statement",
+    "switch_body",
+    "switch_case",
+    "switch_default",
+}
 
 
 def _text(source: bytes, node: Node) -> str:
@@ -85,96 +105,16 @@ class TypeScriptParser:
         call_nodes: list[Node] = []
 
         for child in container_node.children:
-            if child.type == "decorator":
-                self._collect_calls(child, call_nodes)
-                continue
-
-            if child.type == "import_statement":
-                self._handle_import(child, file_path, source, result.imports)
-                continue
-
-            effective, is_bare_reexport = self._unwrap_export(child)
-            if is_bare_reexport:
-                self._handle_reexport(effective, file_path, source, result.imports)
-                continue
-
-            if effective.type == "function_declaration":
-                self._emit_named(
-                    effective,
-                    child,
-                    SymbolKind.FUNCTION,
-                    file_path,
-                    module_path,
-                    name_stack,
-                    parent_qualified_name,
-                    source,
-                    result,
-                )
-            elif effective.type == "class_declaration":
-                for dec in (c for c in effective.children if c.type == "decorator"):
-                    self._collect_calls(dec, call_nodes)
-                self._emit_named(
-                    effective,
-                    child,
-                    SymbolKind.CLASS,
-                    file_path,
-                    module_path,
-                    name_stack,
-                    parent_qualified_name,
-                    source,
-                    result,
-                )
-            elif effective.type == "method_definition":
-                self._emit_named(
-                    effective,
-                    child,
-                    SymbolKind.METHOD,
-                    file_path,
-                    module_path,
-                    name_stack,
-                    parent_qualified_name,
-                    source,
-                    result,
-                )
-            elif effective.type in ("lexical_declaration", "variable_declaration"):
-                for declarator in (
-                    c for c in effective.children if c.type == "variable_declarator"
-                ):
-                    value = declarator.child_by_field_name("value")
-                    if value is not None and value.type in _FUNCTION_VALUE_TYPES:
-                        self._emit_arrow(
-                            declarator,
-                            value,
-                            child,
-                            SymbolKind.FUNCTION,
-                            file_path,
-                            module_path,
-                            name_stack,
-                            parent_qualified_name,
-                            source,
-                            result,
-                        )
-                    elif value is not None:
-                        self._collect_calls(value, call_nodes)
-            elif effective.type == "public_field_definition":
-                value = effective.child_by_field_name("value")
-                if value is not None and value.type in _FUNCTION_VALUE_TYPES:
-                    self._emit_arrow(
-                        effective,
-                        value,
-                        child,
-                        SymbolKind.METHOD,
-                        file_path,
-                        module_path,
-                        name_stack,
-                        parent_qualified_name,
-                        source,
-                        result,
-                    )
-                elif value is not None:
-                    self._collect_calls(value, call_nodes)
-            else:
-                self._collect_calls(child, call_nodes)
+            self._process_statement(
+                child,
+                file_path=file_path,
+                module_path=module_path,
+                name_stack=name_stack,
+                parent_qualified_name=parent_qualified_name,
+                source=source,
+                result=result,
+                call_nodes=call_nodes,
+            )
 
         for call_node in call_nodes:
             func_field = call_node.child_by_field_name("function")
@@ -188,6 +128,118 @@ class TypeScriptParser:
                     line=call_node.start_point[0] + 1,
                 )
             )
+
+    def _process_statement(
+        self,
+        node: Node,
+        file_path: str,
+        module_path: str,
+        name_stack: list[str],
+        parent_qualified_name: str | None,
+        source: bytes,
+        result: ParseResult,
+        call_nodes: list[Node],
+    ) -> None:
+        if node.type == "decorator":
+            self._collect_calls(node, call_nodes)
+            return
+
+        if node.type == "import_statement":
+            self._handle_import(node, file_path, source, result.imports)
+            return
+
+        effective, is_bare_reexport = self._unwrap_export(node)
+        if is_bare_reexport:
+            self._handle_reexport(effective, file_path, source, result.imports)
+            return
+
+        if effective.type == "function_declaration":
+            self._emit_named(
+                effective,
+                node,
+                SymbolKind.FUNCTION,
+                file_path,
+                module_path,
+                name_stack,
+                parent_qualified_name,
+                source,
+                result,
+            )
+        elif effective.type == "class_declaration":
+            for dec in (c for c in effective.children if c.type == "decorator"):
+                self._collect_calls(dec, call_nodes)
+            self._emit_named(
+                effective,
+                node,
+                SymbolKind.CLASS,
+                file_path,
+                module_path,
+                name_stack,
+                parent_qualified_name,
+                source,
+                result,
+            )
+        elif effective.type == "method_definition":
+            self._emit_named(
+                effective,
+                node,
+                SymbolKind.METHOD,
+                file_path,
+                module_path,
+                name_stack,
+                parent_qualified_name,
+                source,
+                result,
+            )
+        elif effective.type in ("lexical_declaration", "variable_declaration"):
+            for declarator in (c for c in effective.children if c.type == "variable_declarator"):
+                value = declarator.child_by_field_name("value")
+                if value is not None and value.type in _FUNCTION_VALUE_TYPES:
+                    self._emit_arrow(
+                        declarator,
+                        value,
+                        node,
+                        SymbolKind.FUNCTION,
+                        file_path,
+                        module_path,
+                        name_stack,
+                        parent_qualified_name,
+                        source,
+                        result,
+                    )
+                elif value is not None:
+                    self._collect_calls(value, call_nodes)
+        elif effective.type == "public_field_definition":
+            value = effective.child_by_field_name("value")
+            if value is not None and value.type in _FUNCTION_VALUE_TYPES:
+                self._emit_arrow(
+                    effective,
+                    value,
+                    node,
+                    SymbolKind.METHOD,
+                    file_path,
+                    module_path,
+                    name_stack,
+                    parent_qualified_name,
+                    source,
+                    result,
+                )
+            elif value is not None:
+                self._collect_calls(value, call_nodes)
+        elif effective.type in _TRANSPARENT_TYPES:
+            for child in effective.children:
+                self._process_statement(
+                    child,
+                    file_path=file_path,
+                    module_path=module_path,
+                    name_stack=name_stack,
+                    parent_qualified_name=parent_qualified_name,
+                    source=source,
+                    result=result,
+                    call_nodes=call_nodes,
+                )
+        else:
+            self._collect_calls(effective, call_nodes)
 
     def _collect_calls(self, node: Node, out: list[Node]) -> None:
         if node.type in _OPAQUE_TYPES:

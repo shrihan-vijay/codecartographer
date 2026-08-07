@@ -19,6 +19,10 @@ def parse_fixture(name: str) -> tuple:
     return parser.parse(name, source)
 
 
+def parse_source(source: str, file_path: str = "nested.py") -> tuple:
+    return PythonParser().parse(file_path, source.encode())
+
+
 def test_module_docstring_and_imports() -> None:
     result = parse_fixture("tricky.py")
     modules = {i.module for i in result.imports}
@@ -78,3 +82,75 @@ def test_signature_excludes_body() -> None:
     result = parse_fixture("sibling.py")
     by_qn = {s.qualified_name: s for s in result.symbols}
     assert by_qn["sibling.helper"].signature == "def helper(x)"
+
+
+def test_definitions_nested_in_if_else_are_captured() -> None:
+    result = parse_source(
+        """
+def outer():
+    if condition():
+        def inner_if():
+            pass
+    else:
+        def inner_else():
+            pass
+"""
+    )
+    by_qn = {s.qualified_name: s for s in result.symbols}
+    assert "nested.outer.inner_if" in by_qn
+    assert "nested.outer.inner_else" in by_qn
+    assert by_qn["nested.outer.inner_if"].parent_qualified_name == "nested.outer"
+
+
+def test_definitions_nested_in_for_while_try_with_are_captured() -> None:
+    result = parse_source(
+        """
+def outer():
+    for x in items():
+        def inner_for():
+            pass
+    while running():
+        def inner_while():
+            pass
+    try:
+        def inner_try():
+            pass
+    except ValueError:
+        def inner_except():
+            pass
+    finally:
+        def inner_finally():
+            pass
+    with open("f") as fh:
+        def inner_with():
+            pass
+"""
+    )
+    by_qn = {s.qualified_name: s for s in result.symbols}
+    for name in (
+        "inner_for",
+        "inner_while",
+        "inner_try",
+        "inner_except",
+        "inner_finally",
+        "inner_with",
+    ):
+        assert f"nested.outer.{name}" in by_qn, name
+
+
+def test_calls_inside_control_flow_nested_definitions_attributed_to_nested_def() -> None:
+    result = parse_source(
+        """
+def outer():
+    if condition():
+        def inner():
+            helper()
+"""
+    )
+    calls_by_caller: dict[str, list[str]] = {}
+    for c in result.calls:
+        calls_by_caller.setdefault(c.caller_qualified_name, []).append(c.callee_name)
+
+    assert "helper" in calls_by_caller["nested.outer.inner"]
+    assert "condition" in calls_by_caller["nested.outer"]
+    assert "helper" not in calls_by_caller["nested.outer"]

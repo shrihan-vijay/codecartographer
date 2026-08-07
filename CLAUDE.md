@@ -96,10 +96,13 @@ SQLAlchemy loading and individually deleting children — combining ORM cascade 
 without `passive_deletes=True` either double-deletes (warnings) or nulls out NOT NULL FKs
 (hard failure). Don't remove `passive_deletes=True` without re-testing a delete-and-replace cycle.
 
-**Known gap**: definitions (functions/classes) nested inside `if`/`for`/`try`/`with` blocks are
-not walked into by either parser — only direct children of a module/function/class body are
-treated as definitions. This is intentional for Phase 1 (rare pattern, high complexity to handle
-correctly); see the `_DEFINITION_TYPES`/`_OPAQUE_TYPES` comments in the parser files.
+**Definitions nested inside control-flow blocks are captured.** Both parsers treat control-flow
+containers (`if`/`elif`/`else`, `for`, `while`, `try`/`except`/`finally`, `with`, `match`/`case`
+in Python; `if`/`else`, `for`/`for-in`, `while`/`do`, `try`/`catch`/`finally`, `switch` in
+TypeScript) as transparent to the enclosing lexical scope — see the `_TRANSPARENT_TYPES` sets and
+`_process_statement` in each parser file. A `def`/`class` nested inside one of these blocks is
+still discovered as a symbol, and calls inside it are attributed to *it*, not to the enclosing
+function, matching how calls inside any other nested definition are handled.
 
 ## Spec-driven development
 

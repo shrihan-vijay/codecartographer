@@ -14,10 +14,27 @@ from codecartographer.parsers.base import (
 _LANGUAGE = Language(tspython.language())
 
 # Statements whose direct children may themselves be definitions/statements we walk
-# into (module root, and function/class bodies). Definitions nested inside if/for/
-# try/with blocks are a known gap: kept out of scope for Phase 1 to avoid a much
-# more elaborate control-flow-aware walk for a rare pattern.
+# into (module root, and function/class bodies).
 _DEFINITION_TYPES = {"function_definition", "class_definition"}
+
+# Control-flow/block containers whose children are treated as part of the same
+# lexical scope as their enclosing block, so a `def`/`class` nested inside an
+# if/for/while/try/with/match body is still discovered as a symbol (and its own
+# calls attributed correctly) instead of being silently skipped.
+_TRANSPARENT_TYPES = {
+    "block",
+    "if_statement",
+    "elif_clause",
+    "else_clause",
+    "for_statement",
+    "while_statement",
+    "try_statement",
+    "except_clause",
+    "finally_clause",
+    "with_statement",
+    "match_statement",
+    "case_clause",
+}
 
 
 def _text(source: bytes, node: Node) -> str:
@@ -82,36 +99,17 @@ class PythonParser:
         call_nodes: list[Node] = []
 
         for child in container_node.children:
-            if child.type == "decorated_definition":
-                inner = next((c for c in child.children if c.type in _DEFINITION_TYPES), None)
-                for dec in (c for c in child.children if c.type == "decorator"):
-                    self._collect_calls(dec, call_nodes)
-                if inner is not None:
-                    self._handle_definition(
-                        def_node=inner,
-                        span_node=child,
-                        file_path=file_path,
-                        module_path=module_path,
-                        name_stack=name_stack,
-                        parent_qualified_name=parent_qualified_name,
-                        parent_kind=parent_kind,
-                        source=source,
-                        result=result,
-                    )
-            elif child.type in _DEFINITION_TYPES:
-                self._handle_definition(
-                    def_node=child,
-                    span_node=child,
-                    file_path=file_path,
-                    module_path=module_path,
-                    name_stack=name_stack,
-                    parent_qualified_name=parent_qualified_name,
-                    parent_kind=parent_kind,
-                    source=source,
-                    result=result,
-                )
-            else:
-                self._collect_calls(child, call_nodes)
+            self._process_statement(
+                node=child,
+                file_path=file_path,
+                module_path=module_path,
+                name_stack=name_stack,
+                parent_qualified_name=parent_qualified_name,
+                parent_kind=parent_kind,
+                source=source,
+                result=result,
+                call_nodes=call_nodes,
+            )
 
         for call_node in call_nodes:
             func_field = call_node.child_by_field_name("function")
@@ -125,6 +123,64 @@ class PythonParser:
                     line=call_node.start_point[0] + 1,
                 )
             )
+
+    def _process_statement(
+        self,
+        node: Node,
+        file_path: str,
+        module_path: str,
+        name_stack: list[str],
+        parent_qualified_name: str | None,
+        parent_kind: SymbolKind | None,
+        source: bytes,
+        result: ParseResult,
+        call_nodes: list[Node],
+    ) -> None:
+        if node.type == "decorated_definition":
+            inner = next((c for c in node.children if c.type in _DEFINITION_TYPES), None)
+            for dec in (c for c in node.children if c.type == "decorator"):
+                self._collect_calls(dec, call_nodes)
+            if inner is not None:
+                self._handle_definition(
+                    def_node=inner,
+                    span_node=node,
+                    file_path=file_path,
+                    module_path=module_path,
+                    name_stack=name_stack,
+                    parent_qualified_name=parent_qualified_name,
+                    parent_kind=parent_kind,
+                    source=source,
+                    result=result,
+                )
+            return
+        if node.type in _DEFINITION_TYPES:
+            self._handle_definition(
+                def_node=node,
+                span_node=node,
+                file_path=file_path,
+                module_path=module_path,
+                name_stack=name_stack,
+                parent_qualified_name=parent_qualified_name,
+                parent_kind=parent_kind,
+                source=source,
+                result=result,
+            )
+            return
+        if node.type in _TRANSPARENT_TYPES:
+            for child in node.children:
+                self._process_statement(
+                    node=child,
+                    file_path=file_path,
+                    module_path=module_path,
+                    name_stack=name_stack,
+                    parent_qualified_name=parent_qualified_name,
+                    parent_kind=parent_kind,
+                    source=source,
+                    result=result,
+                    call_nodes=call_nodes,
+                )
+            return
+        self._collect_calls(node, call_nodes)
 
     def _collect_calls(self, node: Node, out: list[Node]) -> None:
         if node.type in _DEFINITION_TYPES or node.type == "decorated_definition":
