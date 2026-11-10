@@ -26,6 +26,11 @@ Answer only from what your tools return -- never from general knowledge about ho
 meaning, get_callers/get_callees to trace the call graph, and read_source to quote exact
 code before citing it.
 
+Always start with search_code. Never guess a file path: only pass read_source a file_path
+(and line numbers) that an earlier tool result gave you. If a tool returns an error or
+nothing useful, try a different search query rather than giving up, and never ask the user
+for more information -- everything you need is reachable through your tools.
+
 When you are ready to conclude, call provide_final_answer exactly once. If you cannot
 ground a claim in a tool result, say so explicitly in `answer` and leave `citations` empty
 or partial -- do not fabricate a citation."""
@@ -237,7 +242,14 @@ def run_agent_stream(
         message = response.message
         messages.append(message)
 
-        tool_calls = message.tool_calls or []
+        tool_calls = [(c.function.name, c.function.arguments) for c in message.tool_calls or []]
+        if not tool_calls:
+            # Smaller local models sometimes write a tool call as JSON in the message text
+            # instead of emitting a structured tool call; recover it rather than treating
+            # the raw JSON as the final answer.
+            text_call = _extract_text_tool_call(message.content or "")
+            if text_call is not None:
+                tool_calls = [text_call]
         if not tool_calls:
             # Best effort: a model that never calls provide_final_answer still gets a
             # usable (uncited) response rather than an empty one -- see spec's stated
@@ -245,9 +257,7 @@ def run_agent_stream(
             yield AgentAnswer(answer=message.content or "", citations=[])
             return
 
-        for call in tool_calls:
-            name = call.function.name
-            arguments = call.function.arguments
+        for name, arguments in tool_calls:
             if name == "provide_final_answer":
                 yield _parse_final_answer(arguments)
                 return
@@ -259,6 +269,28 @@ def run_agent_stream(
         answer="I wasn't able to reach a grounded answer within the allotted steps.",
         citations=[],
     )
+
+
+_TOOL_NAMES = {tool["function"]["name"] for tool in TOOLS}
+
+
+def _extract_text_tool_call(content: str) -> tuple[str, Mapping[str, Any]] | None:
+    """Find a `{"name": <known tool>, "parameters"|"arguments": {...}}` object anywhere in
+    `content` (models often wrap it in prose). Returns None if there isn't one.
+    """
+    decoder = json.JSONDecoder()
+    index = content.find("{")
+    while index != -1:
+        try:
+            obj, _ = decoder.raw_decode(content, index)
+        except json.JSONDecodeError:
+            obj = None
+        if isinstance(obj, dict) and obj.get("name") in _TOOL_NAMES:
+            arguments = obj.get("parameters", obj.get("arguments", {}))
+            if isinstance(arguments, dict):
+                return obj["name"], arguments
+        index = content.find("{", index + 1)
+    return None
 
 
 def _parse_final_answer(arguments: Mapping[str, Any]) -> AgentAnswer:

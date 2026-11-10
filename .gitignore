@@ -10,3 +10,6 @@ build/
 .env
 .DS_Store
 CodeCartographer_Interview_Study_Guide.pdf
+
+# Packaged extension zip (build output; regenerate from extension/)
+codecartographer-extension.zip
