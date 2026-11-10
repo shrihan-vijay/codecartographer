@@ -93,9 +93,7 @@ def test_tool_call_then_final_answer_reads_real_source(source_repo: Path) -> Non
             "citations": [{"file_path": "app.py", "start_line": 1, "symbol_name": "add"}],
         },
     )
-    client = FakeOllamaClient(
-        [_assistant_message([read_call]), _assistant_message([final_call])]
-    )
+    client = FakeOllamaClient([_assistant_message([read_call]), _assistant_message([final_call])])
 
     result = run_agent(
         session=None,  # type: ignore[arg-type]
@@ -121,9 +119,7 @@ def test_tool_call_then_final_answer_reads_real_source(source_repo: Path) -> Non
 def test_stream_yields_tool_call_event_before_final_answer(source_repo: Path) -> None:
     read_call = _tool_call("read_source", {"file_path": "app.py", "start_line": 1, "end_line": 2})
     final_call = _tool_call("provide_final_answer", {"answer": "done", "citations": []})
-    client = FakeOllamaClient(
-        [_assistant_message([read_call]), _assistant_message([final_call])]
-    )
+    client = FakeOllamaClient([_assistant_message([read_call]), _assistant_message([final_call])])
 
     events = list(
         run_agent_stream(
@@ -160,6 +156,34 @@ def test_no_tool_call_falls_back_to_message_content(source_repo: Path) -> None:
     assert result.citations == []
 
 
+def test_tool_call_written_as_text_is_executed_not_returned(source_repo: Path) -> None:
+    # Local models sometimes emit a tool call as JSON in the message body (often wrapped
+    # in prose) instead of a structured tool call; it must run, not become the answer.
+    text_call = (
+        "That file doesn't exist. Let me try again.\n\n"
+        '{"name": "read_source", "parameters": {"file_path": "app.py", '
+        '"start_line": 1, "end_line": 2}}'
+    )
+    final_call = _tool_call("provide_final_answer", {"answer": "done", "citations": []})
+    client = FakeOllamaClient(
+        [_assistant_message(content=text_call), _assistant_message([final_call])]
+    )
+
+    result = run_agent(
+        session=None,  # type: ignore[arg-type]
+        run=_fake_run(),
+        repo_path=source_repo,
+        question="What does add do?",
+        client=client,
+        embedder=_UnusedEmbedder(),  # type: ignore[arg-type]
+    )
+
+    assert result.answer == "done"
+    tool_result_message = client.calls[1]["messages"][-1]
+    assert tool_result_message["role"] == "tool"
+    assert "return a + b" in tool_result_message["content"]
+
+
 def test_max_iterations_cap_stops_an_endless_tool_loop(source_repo: Path) -> None:
     read_call = _tool_call("read_source", {"file_path": "app.py", "start_line": 1, "end_line": 2})
     # The model never calls provide_final_answer -- every response asks for another tool call.
@@ -185,9 +209,7 @@ def test_read_source_rejects_path_escaping_repo_root(source_repo: Path) -> None:
         "read_source", {"file_path": "../../etc/passwd", "start_line": 1, "end_line": 1}
     )
     final_call = _tool_call("provide_final_answer", {"answer": "no such file", "citations": []})
-    client = FakeOllamaClient(
-        [_assistant_message([escape_call]), _assistant_message([final_call])]
-    )
+    client = FakeOllamaClient([_assistant_message([escape_call]), _assistant_message([final_call])])
 
     run_agent(
         session=None,  # type: ignore[arg-type]

@@ -78,12 +78,40 @@ uv run uvicorn codecartographer.api:app
 Then either open `http://localhost:8000` in a browser, or load `extension/` as an unpacked
 Chrome extension (see [`extension/README.md`](extension/README.md)) for a side-panel client.
 
+## Known limitations and next steps
+
+Handoff notes for whoever picks this up next. Each item links back to the phase spec that
+deliberately scoped it out.
+
+- **Local model reliability.** `llama3.1` (8B) sometimes emits malformed tool calls or answers
+  without calling `provide_final_answer`, which means no citations. The agent recovers tool
+  calls written as plain JSON text, but it can't repair JSON that is actually malformed.
+  Narrow questions ("Which functions call X?") are more reliable than broad ones. The
+  highest-value next step is evaluating a stronger tool-calling model (e.g. `qwen2.5`) via
+  `--model`, with a small fixed question set to measure the success rate.
+- **Unresolved calls.** Calls into the standard library and third-party packages are recorded
+  in `unresolved_calls` (reason `no_matching_symbol`) rather than guessed, so on a typical repo
+  they outnumber resolved calls. This is intentional ([Phase 1](specs/phase-1-indexing-foundation.md)),
+  but classifying them (stdlib vs. third-party vs. truly unknown) would make the numbers easier
+  to read.
+- **Full re-index only.** Re-indexing replaces the whole run; there's no incremental,
+  changed-files-only indexing ([Phase 2](specs/phase-2-embeddings.md)).
+- **Single-turn Q&A, no auth.** No conversation memory, no multi-user support
+  ([Phase 3](specs/phase-3-agentic-qa.md)).
+- **Extension needs a typed repo path.** It doesn't auto-detect the repo from a GitHub/GitLab
+  page or annotate code inline ([Phase 4](specs/phase-4-chrome-extension.md)).
+- **Not on PyPI yet.** Packaging is ready, but nothing has been published
+  ([Phase 5](specs/phase-5-pypi-packaging.md)).
+
 ## Development
 
 ```
 make test    # uv run pytest, requires a live Postgres via CODECART_DATABASE_URL
 make lint    # ruff check + mypy
 ```
+
+Note: the test suite truncates every table in the database it points at, including any repo
+you've indexed. Re-run `codecart index` after testing before a demo.
 
 See [`CLAUDE.md`](CLAUDE.md) for architecture notes (pipeline layout, qualified-name
 conventions, resolution semantics, known gaps) and [`specs/README.md`](specs/README.md) for
